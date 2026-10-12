@@ -592,6 +592,10 @@ class EnableBankingProvider(BankProvider):
         # newest transactions until its own date caught up.
         today = datetime.now(timezone.utc).date()
         if since is not None:
+            # A start after today is an empty window, not a request the bank
+            # should be asked to reject.
+            if since > today:
+                return []
             return await self._fetch_transactions(
                 account_external_id, since, today, payee_source
             )

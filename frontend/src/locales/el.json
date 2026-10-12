@@ -1048,7 +1048,22 @@
     "syncAssetsHint": "Όταν είναι απενεργοποιημένο, αυτή η σύνδεση συγχρονίζει λογαριασμούς και συναλλαγές αλλά αφήνει ανέπαφες τις επενδυτικές θέσεις του παρόχου.",
     "initialSyncSettings": "Επιλογές συγχρονισμού",
     "initialSyncSettingsDesc": "Επιλέξτε τι θα πρέπει να εισαγάγει το Securo πριν ανοίξει τον σύνδεσμο.",
-    "continueToConnector": "Συνέχεια στον σύνδεσμο"
+    "continueToConnector": "Συνέχεια στον σύνδεσμο",
+    "importHistory": "Ιστορικό συναλλαγών",
+    "importHistoryFull": "Πλήρες ιστορικό",
+    "importHistoryFullHint": "Εισαγωγή όλων όσων παρέχει η τράπεζα (συνήθως περίπου 90 ημέρες).",
+    "importHistoryFresh": "Νέα αρχή",
+    "importHistoryFreshHint": "Χωρίς παλαιότερες συναλλαγές. Το υπόλοιπό σας ξεκινά από σήμερα.",
+    "importHistoryFromDate": "Από ημερομηνία",
+    "importHistoryFromDateHint": "Εισαγωγή μόνο των συναλλαγών από την ημερομηνία που επιλέγετε.",
+    "importHistoryOnOrAfter": "Την ή μετά την",
+    "importHistoryAfter": "Μετά την",
+    "importHistorySummary": "Εισαγωγή από {{date}}. Το αρχικό υπόλοιπο ορίζεται στις {{openingDate}}.",
+    "importHistoryBankLimit": "Αυτή η τράπεζα παρέχει μόνο περίπου {{days}} ημέρες ιστορικού. Οι παλαιότερες συναλλαγές δεν θα είναι διαθέσιμες.",
+    "importHistoryFutureHint": "Δεν εισάγεται τίποτα μέχρι αυτή την ημερομηνία.",
+    "importHistoryFromValue": "Από {{date}}",
+    "importHistoryLockedHint": "Επιλέχθηκε κατά τη δημιουργία της σύνδεσης. Δεν μπορεί να αλλάξει.",
+    "continueToBank": "Συνέχεια στην τράπεζα"
   },
   "settings": {
     "rules": "Κανόνες",

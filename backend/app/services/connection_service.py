@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
+from pydantic import ValidationError
 from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +36,7 @@ from app.providers.base import (
     ProviderUserActionRequired,
     SessionExpiredError,
 )
+from app.schemas.bank_connection import ImportWindow
 from app.services import oauth_state
 from app.services import admin_service
 from app.services import reconciliation_service, recurring_match_service
@@ -235,6 +237,79 @@ PLUGGY_CATEGORY_MAP = {
     "Transfers": "Transferências",
     "Wire transfers": "Transferências",
 }
+
+
+# A fresh fetch only passes the import cutoff to the provider as ``since`` when
+# it is this recent, which every supported bank's history window covers.
+_CUTOFF_NARROW_DAYS = 30
+
+
+def _resolve_import_window(window: object) -> dict[str, str]:
+    """Turn a connect-time import window into the settings keys that store it.
+
+    Accepts an ``ImportWindow`` or the raw dict carried through OAuth state.
+    The operator is folded into the date, so ``import_from`` is always the
+    first day allowed in (inclusive). Full history stores nothing.
+    """
+    if window is None:
+        return {}
+    if not isinstance(window, ImportWindow):
+        try:
+            window = ImportWindow.model_validate(window)
+        except ValidationError as exc:
+            raise ValueError("Invalid import window") from exc
+    if window.mode == "full":
+        return {}
+    if window.mode == "fresh":
+        return {"import_mode": "fresh", "import_from": app_today().isoformat()}
+    start = window.date if window.inclusive else window.date + timedelta(days=1)
+    return {"import_mode": "from_date", "import_from": start.isoformat()}
+
+
+def _import_cutoff(settings: Optional[dict]) -> Optional[date]:
+    """First transaction date this connection imports, or None for no limit."""
+    raw = (settings or {}).get("import_from")
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError:
+        logger.warning("Ignoring malformed import_from setting: %r", raw)
+        return None
+
+
+async def _fetch_transactions_from_cutoff(
+    provider,
+    credentials: dict,
+    account_external_id: str,
+    since: Optional[date],
+    cutoff: Optional[date],
+    **kwargs,
+) -> list:
+    """Fetch an account's transactions, never reaching back past ``cutoff``.
+
+    The cutoff narrows the provider request where it safely can, but the local
+    filter is what guarantees it: providers treat ``since`` as a hint (rewinds,
+    backdated rows, a different date field).
+    """
+    if cutoff is None:
+        return await provider.get_transactions(
+            credentials, account_external_id, since, **kwargs
+        )
+    # One day of slack for providers whose "today" runs ahead of the app clock.
+    if cutoff > app_today() + timedelta(days=1):
+        return []
+    if since is not None:
+        since = max(since, cutoff)
+    elif cutoff >= app_today() - timedelta(days=_CUTOFF_NARROW_DAYS):
+        since = cutoff
+    # else: an old cutoff on a fresh fetch stays ``since=None`` so the provider
+    # applies its own history window (and fallbacks) instead of being asked
+    # for a range the bank may reject.
+    transactions = await provider.get_transactions(
+        credentials, account_external_id, since, **kwargs
+    )
+    return [t for t in transactions if t.date >= cutoff]
 
 
 def _sync_assets_enabled(settings: Optional[dict]) -> bool:
@@ -926,6 +1001,8 @@ async def get_oauth_url(
     reconnect_connection_id: Optional[uuid.UUID] = None,
 ) -> str:
     provider = get_provider(provider_name)
+    # Reject a bad import window before sending the user to their bank.
+    _resolve_import_window((flow_params or {}).get("import_window"))
     state = await oauth_state.store_state(
         {
             "user_id": str(user_id),
@@ -1033,6 +1110,7 @@ async def handle_oauth_callback(
     state: Optional[str] = None,
     sync_assets: Optional[bool] = None,
     reconnect_connection_id: Optional[uuid.UUID] = None,
+    import_window: Optional[ImportWindow] = None,
 ) -> BankConnection:
     state_payload: dict = {}
     if state:
@@ -1081,7 +1159,14 @@ async def handle_oauth_callback(
 
     flow_params = dict(state_payload.get("flow_params") or {})
     flow_sync_assets = flow_params.pop("sync_assets", None)
+    flow_import_window = flow_params.pop("import_window", None)
     initial_settings: dict[str, object] = {"flow_params": flow_params}
+    initial_settings.update(
+        _resolve_import_window(
+            import_window if import_window is not None else flow_import_window
+        )
+    )
+    import_cutoff = _import_cutoff(initial_settings)
     if sync_assets is None and isinstance(flow_sync_assets, bool):
         sync_assets = flow_sync_assets
     if sync_assets is not None:
@@ -1143,9 +1228,14 @@ async def handle_oauth_callback(
             session, user_id, account, provider, connection_data.credentials
         )
 
-        # Fetch initial transactions (since=None fetches all available history)
-        transactions_data = await provider.get_transactions(
-            connection_data.credentials, acc_data.external_id, None
+        # Fetch initial transactions (since=None fetches all available history,
+        # unless the user picked an import cutoff at connect time)
+        transactions_data = await _fetch_transactions_from_cutoff(
+            provider,
+            connection_data.credentials,
+            acc_data.external_id,
+            None,
+            import_cutoff,
         )
         incoming_external_ids = {txn.external_id for txn in transactions_data}
         seen_external_ids: set[str] = set()
@@ -1266,7 +1356,9 @@ async def handle_oauth_callback(
         # that SUM(all transactions) matches the provider-reported balance. Any
         # history that falls outside the provider's lookback window gets
         # absorbed into this synthetic transaction.
-        await sync_opening_balance_for_connected_account(session, account)
+        await sync_opening_balance_for_connected_account(
+            session, account, import_from=import_cutoff
+        )
 
     # Detect transfer pairs among newly synced transactions
     await detect_transfer_pairs(session, workspace_id, candidate_ids=new_tx_ids)
@@ -1907,6 +1999,7 @@ async def sync_connection(
     conn_settings = connection.settings or {}
     payee_source = conn_settings.get("payee_source", "auto")
     import_pending = conn_settings.get("import_pending", True)
+    import_cutoff = _import_cutoff(conn_settings)
     use_provider_cats = await admin_service.use_provider_categories(session)
 
     # Resolve the provider before the error-handling block: an unregistered
@@ -2105,8 +2198,13 @@ async def sync_connection(
                 if connection.last_sync_at
                 else None
             )
-            transactions_data = await provider.get_transactions(
-                credentials, acc_data.external_id, since, payee_source=payee_source
+            transactions_data = await _fetch_transactions_from_cutoff(
+                provider,
+                credentials,
+                acc_data.external_id,
+                since,
+                import_cutoff,
+                payee_source=payee_source,
             )
 
             if not import_pending:
@@ -2356,7 +2454,9 @@ async def sync_connection(
 
             # Reconcile the opening balance after any new transactions land so
             # SUM(all txs) keeps matching account.balance from the provider.
-            await sync_opening_balance_for_connected_account(session, account)
+            await sync_opening_balance_for_connected_account(
+                session, account, import_from=import_cutoff
+            )
 
         # Detect transfer pairs among newly synced transactions
         if new_tx_ids:
@@ -2399,7 +2499,9 @@ async def sync_connection(
                 )
             )
             for touched_account in touched_accounts.scalars():
-                await sync_opening_balance_for_connected_account(session, touched_account)
+                await sync_opening_balance_for_connected_account(
+                    session, touched_account, import_from=import_cutoff
+                )
 
         # Refresh investment holdings (brokerage, fixed income, funds,
         # etc.) when enabled for this connection. Errors here are logged but

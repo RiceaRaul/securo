@@ -350,3 +350,62 @@ async def test_update_settings_success(
     )
     assert resp.status_code == 200
     assert resp.json()["settings"]["payee_source"] == "merchant"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_stores_import_window(client: AsyncClient, auth_headers):
+    conn_data = MagicMock()
+    conn_data.external_id = "ext-window-1"
+    conn_data.institution_name = "Window Bank"
+    conn_data.logo_url = None
+    conn_data.credentials = {"token": "abc"}
+    conn_data.accounts = []
+
+    with patch("app.services.connection_service.get_provider") as mock_gp:
+        mock_gp.return_value.handle_oauth_callback = AsyncMock(return_value=conn_data)
+        resp = await client.post(
+            "/api/connections/oauth/callback",
+            json={
+                "code": "auth-code-123",
+                "provider": "pluggy",
+                "import_window": {
+                    "mode": "from_date", "date": "2026-10-15", "inclusive": False,
+                },
+            },
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    settings = resp.json()["settings"]
+    assert settings["import_mode"] == "from_date"
+    assert settings["import_from"] == "2026-10-16"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_rejects_from_date_without_date(
+    client: AsyncClient, auth_headers
+):
+    resp = await client.post(
+        "/api/connections/oauth/callback",
+        json={
+            "code": "auth-code-123",
+            "provider": "pluggy",
+            "import_window": {"mode": "from_date"},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_oauth_url_rejects_bad_import_window(client: AsyncClient, auth_headers):
+    with patch("app.services.connection_service.get_provider"):
+        resp = await client.post(
+            "/api/connections/oauth/url",
+            json={
+                "provider": "enable_banking",
+                "flow_params": {"import_window": {"mode": "from_date"}},
+            },
+            headers=auth_headers,
+        )
+    assert resp.status_code == 400

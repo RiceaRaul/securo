@@ -1318,7 +1318,22 @@
     "syncAssetsHint": "When disabled, this connection syncs accounts and transactions but leaves provider investment holdings untouched.",
     "initialSyncSettings": "Sync options",
     "initialSyncSettingsDesc": "Choose what Securo should import before opening the connector.",
-    "continueToConnector": "Continue to connector"
+    "continueToConnector": "Continue to connector",
+    "importHistory": "Transaction history",
+    "importHistoryFull": "Full history",
+    "importHistoryFullHint": "Import everything the bank provides (usually about 90 days).",
+    "importHistoryFresh": "Start fresh",
+    "importHistoryFreshHint": "No past transactions. Your balance starts from today.",
+    "importHistoryFromDate": "From a date",
+    "importHistoryFromDateHint": "Only import transactions from the date you choose.",
+    "importHistoryOnOrAfter": "On or after",
+    "importHistoryAfter": "After",
+    "importHistorySummary": "Imports from {{date}}. Opening balance is set on {{openingDate}}.",
+    "importHistoryBankLimit": "This bank only provides about {{days}} days of history. Older transactions will not be available.",
+    "importHistoryFutureHint": "Nothing is imported until this date.",
+    "importHistoryFromValue": "From {{date}}",
+    "importHistoryLockedHint": "Chosen when the connection was created. It cannot be changed.",
+    "continueToBank": "Continue to bank"
   },
   "settings": {
     "rules": "Rules",

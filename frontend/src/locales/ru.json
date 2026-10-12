@@ -1335,7 +1335,22 @@
     "syncAssetsHint": "Если выключено, это подключение синхронизирует счета и транзакции, но не изменяет инвестиционные активы провайдера.",
     "initialSyncSettings": "Параметры синхронизации",
     "initialSyncSettingsDesc": "Выберите, что Securo должен импортировать перед открытием коннектора.",
-    "continueToConnector": "Перейти к коннектору"
+    "continueToConnector": "Перейти к коннектору",
+    "importHistory": "История транзакций",
+    "importHistoryFull": "Вся история",
+    "importHistoryFullHint": "Импортировать всё, что предоставляет банк (обычно около 90 дней).",
+    "importHistoryFresh": "Начать с чистого листа",
+    "importHistoryFreshHint": "Без прошлых транзакций. Баланс начинается с сегодняшнего дня.",
+    "importHistoryFromDate": "С даты",
+    "importHistoryFromDateHint": "Импортировать только транзакции начиная с выбранной даты.",
+    "importHistoryOnOrAfter": "В этот день или позже",
+    "importHistoryAfter": "Позже",
+    "importHistorySummary": "Импорт с {{date}}. Начальный баланс будет установлен на {{openingDate}}.",
+    "importHistoryBankLimit": "Этот банк предоставляет только около {{days}} дней истории. Более старые транзакции будут недоступны.",
+    "importHistoryFutureHint": "До этой даты ничего не импортируется.",
+    "importHistoryFromValue": "С {{date}}",
+    "importHistoryLockedHint": "Выбрано при создании подключения. Изменить нельзя.",
+    "continueToBank": "Перейти к банку"
   },
   "settings": {
     "rules": "Правила",

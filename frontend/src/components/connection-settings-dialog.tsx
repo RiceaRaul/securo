@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useDateLocale } from '@/hooks/use-display-locale'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { connections } from '@/lib/api'
 import { toast } from 'sonner'
@@ -32,6 +33,8 @@ export function ConnectionSettingsDialog({
 }: ConnectionSettingsDialogProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const dateLocale = useDateLocale()
+  const importFrom = connection?.settings?.import_from
 
   const [displayName, setDisplayName] = useState('')
   const [payeeSource, setPayeeSource] = useState<PayeeSource>('auto')
@@ -107,6 +110,19 @@ export function ConnectionSettingsDialog({
               onChange={(e) => setImportPending(e.target.checked)}
               className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-4">
+              <Label>{t('connections.importHistory')}</Label>
+              <span className="text-sm text-muted-foreground">
+                {importFrom
+                  ? t('connections.importHistoryFromValue', {
+                      date: new Date(importFrom + 'T00:00:00').toLocaleDateString(dateLocale),
+                    })
+                  : t('connections.importHistoryFull')}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">{t('connections.importHistoryLockedHint')}</p>
           </div>
           {supportsAssetSync && (
             <div className="flex items-start justify-between gap-4">

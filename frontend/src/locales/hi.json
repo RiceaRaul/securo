@@ -1318,7 +1318,22 @@
     "syncAssetsHint": "बंद होने पर, यह कनेक्शन खाते और लेन-देन सिंक करता है लेकिन प्रदाता की निवेश होल्डिंग्स को नहीं छूता।",
     "initialSyncSettings": "सिंक विकल्प",
     "initialSyncSettingsDesc": "कनेक्टर खोलने से पहले चुनें कि Securo को क्या इंपोर्ट करना चाहिए।",
-    "continueToConnector": "कनेक्टर पर जारी रखें"
+    "continueToConnector": "कनेक्टर पर जारी रखें",
+    "importHistory": "लेन-देन इतिहास",
+    "importHistoryFull": "पूरा इतिहास",
+    "importHistoryFullHint": "बैंक जो कुछ भी देता है वह सब आयात करें (आमतौर पर लगभग 90 दिन)।",
+    "importHistoryFresh": "नई शुरुआत",
+    "importHistoryFreshHint": "कोई पुराना लेन-देन नहीं। आपका बैलेंस आज से शुरू होता है।",
+    "importHistoryFromDate": "किसी तारीख से",
+    "importHistoryFromDateHint": "केवल आपकी चुनी हुई तारीख से लेन-देन आयात करें।",
+    "importHistoryOnOrAfter": "इस दिन या उसके बाद",
+    "importHistoryAfter": "इसके बाद",
+    "importHistorySummary": "{{date}} से आयात होगा। प्रारंभिक बैलेंस {{openingDate}} को सेट होगा।",
+    "importHistoryBankLimit": "यह बैंक केवल लगभग {{days}} दिनों का इतिहास देता है। पुराने लेन-देन उपलब्ध नहीं होंगे।",
+    "importHistoryFutureHint": "इस तारीख तक कुछ भी आयात नहीं होगा।",
+    "importHistoryFromValue": "{{date}} से",
+    "importHistoryLockedHint": "कनेक्शन बनाते समय चुना गया। इसे बदला नहीं जा सकता।",
+    "continueToBank": "बैंक पर जारी रखें"
   },
   "settings": {
     "rules": "नियम",

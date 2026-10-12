@@ -1320,7 +1320,22 @@
     "syncAssetsHint": "Indien uitgeschakeld, synchroniseert deze verbinding accounts en transacties, maar laat de investeringen van de provider onaangeroerd.",
     "initialSyncSettings": "Synchronisatie-opties",
     "initialSyncSettingsDesc": "Kies wat Securo moet importeren voordat u de connector opent.",
-    "continueToConnector": "Ga verder naar de connector"
+    "continueToConnector": "Ga verder naar de connector",
+    "importHistory": "Transactiegeschiedenis",
+    "importHistoryFull": "Volledige geschiedenis",
+    "importHistoryFullHint": "Importeer alles wat de bank aanlevert (meestal ongeveer 90 dagen).",
+    "importHistoryFresh": "Opnieuw beginnen",
+    "importHistoryFreshHint": "Geen eerdere transacties. Je saldo begint vanaf vandaag.",
+    "importHistoryFromDate": "Vanaf een datum",
+    "importHistoryFromDateHint": "Importeer alleen transacties vanaf de datum die je kiest.",
+    "importHistoryOnOrAfter": "Op of na",
+    "importHistoryAfter": "Na",
+    "importHistorySummary": "Import vanaf {{date}}. Het beginsaldo wordt gezet op {{openingDate}}.",
+    "importHistoryBankLimit": "Deze bank levert slechts ongeveer {{days}} dagen geschiedenis. Oudere transacties zijn niet beschikbaar.",
+    "importHistoryFutureHint": "Tot deze datum wordt niets geïmporteerd.",
+    "importHistoryFromValue": "Vanaf {{date}}",
+    "importHistoryLockedHint": "Gekozen bij het aanmaken van de koppeling. Kan niet worden gewijzigd.",
+    "continueToBank": "Ga verder naar de bank"
   },
   "settings": {
     "rules": "Regels",

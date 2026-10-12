@@ -1322,7 +1322,22 @@
     "syncAssetsHint": "Lorsqu'il est désactivé, cette connexion synchronise les comptes et transactions mais ne touche pas aux positions d'investissement du fournisseur.",
     "initialSyncSettings": "Options de synchronisation",
     "initialSyncSettingsDesc": "Choisissez ce que Securo doit importer avant d'ouvrir le connecteur.",
-    "continueToConnector": "Continuer vers le connecteur"
+    "continueToConnector": "Continuer vers le connecteur",
+    "importHistory": "Historique des transactions",
+    "importHistoryFull": "Historique complet",
+    "importHistoryFullHint": "Importer tout ce que la banque fournit (généralement environ 90 jours).",
+    "importHistoryFresh": "Repartir de zéro",
+    "importHistoryFreshHint": "Aucune transaction passée. Votre solde démarre aujourd'hui.",
+    "importHistoryFromDate": "À partir d'une date",
+    "importHistoryFromDateHint": "Importer uniquement les transactions à partir de la date choisie.",
+    "importHistoryOnOrAfter": "Le ou après le",
+    "importHistoryAfter": "Après le",
+    "importHistorySummary": "Import à partir du {{date}}. Le solde d'ouverture est fixé au {{openingDate}}.",
+    "importHistoryBankLimit": "Cette banque ne fournit qu'environ {{days}} jours d'historique. Les transactions plus anciennes ne seront pas disponibles.",
+    "importHistoryFutureHint": "Rien n'est importé avant cette date.",
+    "importHistoryFromValue": "À partir du {{date}}",
+    "importHistoryLockedHint": "Choisi à la création de la connexion. Non modifiable.",
+    "continueToBank": "Continuer vers la banque"
   },
   "settings": {
     "rules": "Règles",

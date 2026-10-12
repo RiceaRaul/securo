@@ -1386,7 +1386,22 @@
     "syncAssetsHint": "Ak je vypnuté, prepojenie synchronizuje účty a transakcie, ale investičné pozície od poskytovateľa nechá nedotknuté.",
     "initialSyncSettings": "Možnosti synchronizácie",
     "initialSyncSettingsDesc": "Vyber, čo má Securo importovať, skôr než otvoríš konektor.",
-    "continueToConnector": "Pokračovať ku konektoru"
+    "continueToConnector": "Pokračovať ku konektoru",
+    "importHistory": "História transakcií",
+    "importHistoryFull": "Celá história",
+    "importHistoryFullHint": "Importovať všetko, čo banka poskytuje (zvyčajne približne 90 dní).",
+    "importHistoryFresh": "Začať odznova",
+    "importHistoryFreshHint": "Žiadne minulé transakcie. Váš zostatok začína od dnes.",
+    "importHistoryFromDate": "Od dátumu",
+    "importHistoryFromDateHint": "Importovať iba transakcie od zvoleného dátumu.",
+    "importHistoryOnOrAfter": "V deň alebo po",
+    "importHistoryAfter": "Po",
+    "importHistorySummary": "Import od {{date}}. Počiatočný zostatok sa nastaví na {{openingDate}}.",
+    "importHistoryBankLimit": "Táto banka poskytuje iba približne {{days}} dní histórie. Staršie transakcie nebudú dostupné.",
+    "importHistoryFutureHint": "Do tohto dátumu sa nič neimportuje.",
+    "importHistoryFromValue": "Od {{date}}",
+    "importHistoryLockedHint": "Zvolené pri vytvorení pripojenia. Nedá sa zmeniť.",
+    "continueToBank": "Pokračovať do banky"
   },
   "settings": {
     "rules": "Pravidlá",

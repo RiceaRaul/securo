@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +15,8 @@ from app.models.category import Category
 from app.models.import_log import ImportLog
 from app.models.institution import Institution
 from app.models.transaction import Transaction
+from app.core.app_clock import app_today
+from app.schemas.bank_connection import ImportWindow
 from app.schemas.rule import RuleAction, RuleCondition, RuleCreate
 from app.providers.base import (
     AccountData,
@@ -29,11 +31,13 @@ from app.services.text_similarity import token_overlap
 from app.services.connection_service import (
     _find_existing_connected_account,
     _merge_sync_metadata,
+    _resolve_import_window,
     _match_pluggy_category,
     create_connect_token,
     delete_connection,
     get_connection,
     get_connections,
+    get_oauth_url,
     handle_oauth_callback,
     sync_connection,
     update_connection_settings,
@@ -5477,3 +5481,283 @@ async def test_ensure_group_relocates_wallet_when_connection_moves_workspaces(
     assert group.connection_id == conn.id
     assert group.workspace_id == test_workspace.id
     assert group.name == "Moved Wallet"
+
+
+# ---------------------------------------------------------------------------
+# Import window (history cutoff chosen at connect time)
+# ---------------------------------------------------------------------------
+
+
+def _txn(external_id: str, on: date, amount: str = "10") -> TransactionData:
+    return TransactionData(
+        external_id=external_id, description=external_id.upper(),
+        amount=Decimal(amount), date=on, type="debit", currency="BRL",
+    )
+
+
+def _window_provider(transactions: list[TransactionData], balance: str = "1000") -> AsyncMock:
+    account = AccountData(
+        external_id=f"win-acc-{uuid.uuid4().hex[:8]}", name="Checking",
+        type="checking", balance=Decimal(balance), currency="BRL",
+    )
+    provider = AsyncMock()
+    provider.handle_oauth_callback = AsyncMock(return_value=ConnectionData(
+        external_id=f"win-{uuid.uuid4().hex[:8]}",
+        institution_name="Window Bank",
+        credentials={"token": "x"},
+        accounts=[account],
+    ))
+    provider.refresh_credentials = AsyncMock(return_value={"token": "x"})
+    provider.get_accounts = AsyncMock(return_value=[account])
+    provider.get_transactions = AsyncMock(return_value=transactions)
+    provider.get_holdings = AsyncMock(return_value=[])
+    provider.get_bills = AsyncMock(return_value=[])
+    return provider
+
+
+async def _connect_with_window(session, user, workspace, provider, window):
+    with patch("app.services.connection_service.get_provider", return_value=provider), \
+         patch("app.services.connection_service.detect_transfer_pairs", new_callable=AsyncMock), \
+         patch("app.services.connection_service.stamp_primary_amount", new_callable=AsyncMock), \
+         patch("app.services.connection_service.apply_rules_to_transaction", new_callable=AsyncMock):
+        return await handle_oauth_callback(
+            session, workspace.id, user.id, "code", "test", import_window=window,
+        )
+
+
+async def _account_transactions(session, connection) -> list[Transaction]:
+    result = await session.execute(
+        select(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .where(Account.connection_id == connection.id)
+        .order_by(Transaction.date)
+    )
+    return list(result.scalars().all())
+
+
+def test_resolve_import_window_normalizes_operator():
+    day = date(2026, 10, 15)
+    assert _resolve_import_window(None) == {}
+    assert _resolve_import_window(ImportWindow(mode="full")) == {}
+    assert _resolve_import_window(
+        ImportWindow(mode="from_date", date=day, inclusive=True)
+    ) == {"import_mode": "from_date", "import_from": "2026-10-15"}
+    # Strictly-after is stored as the next day, so there is one comparison.
+    assert _resolve_import_window(
+        {"mode": "from_date", "date": "2026-10-15", "inclusive": False}
+    ) == {"import_mode": "from_date", "import_from": "2026-10-16"}
+    assert _resolve_import_window(ImportWindow(mode="fresh")) == {
+        "import_mode": "fresh", "import_from": app_today().isoformat(),
+    }
+
+
+def test_resolve_import_window_rejects_bad_input():
+    with pytest.raises(ValueError):
+        _resolve_import_window({"mode": "from_date"})
+    with pytest.raises(ValueError):
+        _resolve_import_window({"mode": "sometimes"})
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_full_history_stores_no_cutoff(
+    session: AsyncSession, test_user, test_workspace
+):
+    today = app_today()
+    provider = _window_provider([_txn("full-old", today - timedelta(days=60))])
+
+    connection = await _connect_with_window(session, test_user, test_workspace, provider, None)
+
+    assert "import_from" not in connection.settings
+    assert provider.get_transactions.await_args.args[2] is None
+    rows = await _account_transactions(session, connection)
+    assert "full-old" in [t.external_id for t in rows]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("inclusive, expected", [
+    (True, ["win-on", "win-after"]),
+    (False, ["win-after"]),
+])
+async def test_oauth_callback_from_date_drops_older_transactions(
+    session: AsyncSession, test_user, test_workspace, inclusive, expected
+):
+    today = app_today()
+    cutoff = today - timedelta(days=5)
+    provider = _window_provider([
+        _txn("win-before", cutoff - timedelta(days=1)),
+        _txn("win-on", cutoff),
+        _txn("win-after", cutoff + timedelta(days=1)),
+    ])
+
+    connection = await _connect_with_window(
+        session, test_user, test_workspace, provider,
+        ImportWindow(mode="from_date", date=cutoff, inclusive=inclusive),
+    )
+
+    start = cutoff if inclusive else cutoff + timedelta(days=1)
+    assert connection.settings["import_from"] == start.isoformat()
+    assert provider.get_transactions.await_args.args[2] == start
+    rows = await _account_transactions(session, connection)
+    synced = [t.external_id for t in rows if t.source == "sync"]
+    assert synced == expected
+    # The balance still reconciles, and the opening row sits right before the
+    # cutoff rather than before the first imported transaction.
+    opening = [t for t in rows if t.source == "opening_balance"]
+    assert len(opening) == 1
+    assert opening[0].date == start - timedelta(days=1)
+    assert opening[0].amount == Decimal("1000") + Decimal("10") * len(expected)
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_fresh_start_imports_no_history(
+    session: AsyncSession, test_user, test_workspace
+):
+    today = app_today()
+    provider = _window_provider([
+        _txn("fresh-old", today - timedelta(days=30)),
+        _txn("fresh-yesterday", today - timedelta(days=1)),
+    ])
+
+    connection = await _connect_with_window(
+        session, test_user, test_workspace, provider, ImportWindow(mode="fresh"),
+    )
+
+    assert connection.settings["import_mode"] == "fresh"
+    assert connection.settings["import_from"] == today.isoformat()
+    rows = await _account_transactions(session, connection)
+    assert [t.source for t in rows] == ["opening_balance"]
+    assert rows[0].amount == Decimal("1000")
+    assert rows[0].type == "credit"
+    assert rows[0].date == today - timedelta(days=1)
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_old_cutoff_leaves_provider_window_alone(
+    session: AsyncSession, test_user, test_workspace
+):
+    """A cutoff older than any bank window must not become the request range."""
+    today = app_today()
+    cutoff = today - timedelta(days=200)
+    provider = _window_provider([
+        _txn("old-before", cutoff - timedelta(days=1)),
+        _txn("old-inside", today - timedelta(days=40)),
+    ])
+
+    connection = await _connect_with_window(
+        session, test_user, test_workspace, provider,
+        ImportWindow(mode="from_date", date=cutoff),
+    )
+
+    assert provider.get_transactions.await_args.args[2] is None
+    rows = await _account_transactions(session, connection)
+    assert [t.external_id for t in rows if t.source == "sync"] == ["old-inside"]
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_future_cutoff_skips_fetch(
+    session: AsyncSession, test_user, test_workspace
+):
+    today = app_today()
+    provider = _window_provider([_txn("future-today", today)])
+
+    connection = await _connect_with_window(
+        session, test_user, test_workspace, provider,
+        ImportWindow(mode="from_date", date=today + timedelta(days=3)),
+    )
+
+    provider.get_transactions.assert_not_awaited()
+    rows = await _account_transactions(session, connection)
+    assert [t.source for t in rows] == ["opening_balance"]
+    # Not future-dated, or the account would read zero until the cutoff.
+    assert rows[0].date == today
+    assert rows[0].amount == Decimal("1000")
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_reads_import_window_from_state(
+    session: AsyncSession, test_user, test_workspace
+):
+    provider = _window_provider([])
+    with patch("app.services.connection_service.get_provider", return_value=provider), \
+         patch("app.services.connection_service.oauth_state.consume_state", new_callable=AsyncMock, return_value={
+             "user_id": str(test_user.id),
+             "workspace_id": str(test_workspace.id),
+             "provider": "test",
+             "flow_params": {
+                 "country": "RO",
+                 "institution_name": "Window Bank",
+                 "import_window": {"mode": "from_date", "date": "2026-10-15", "inclusive": False},
+             },
+         }), \
+         patch("app.services.connection_service.detect_transfer_pairs", new_callable=AsyncMock):
+        connection = await handle_oauth_callback(
+            session, test_workspace.id, test_user.id, "code", state="stored-state",
+        )
+
+    assert connection.settings["import_from"] == "2026-10-16"
+    # Not left behind where a reauth would replay it to the provider.
+    assert connection.settings["flow_params"] == {
+        "country": "RO", "institution_name": "Window Bank",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_oauth_url_rejects_bad_import_window():
+    with patch("app.services.connection_service.get_provider", return_value=AsyncMock()), \
+         patch("app.services.connection_service.oauth_state.store_state", new_callable=AsyncMock) as store:
+        with pytest.raises(ValueError):
+            await get_oauth_url(
+                "test", uuid.uuid4(), uuid.uuid4(),
+                flow_params={"import_window": {"mode": "from_date"}},
+            )
+    store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("last_sync_days_ago", [0, None])
+async def test_sync_keeps_import_cutoff_after_rewind_and_reconnect(
+    session: AsyncSession, test_user, test_workspace, last_sync_days_ago
+):
+    """The 14-day rewind and a reconnect (last_sync_at=None) both reach back
+    past the cutoff; neither may bring older rows in."""
+    today = app_today()
+    cutoff = today - timedelta(days=3)
+    provider = _window_provider([])
+    connection = await _connect_with_window(
+        session, test_user, test_workspace, provider,
+        ImportWindow(mode="from_date", date=cutoff),
+    )
+    connection.last_sync_at = (
+        None if last_sync_days_ago is None
+        else datetime.now(timezone.utc) - timedelta(days=last_sync_days_ago)
+    )
+    await session.commit()
+
+    provider.get_transactions = AsyncMock(return_value=[
+        _txn("resync-before", cutoff - timedelta(days=2)),
+        _txn("resync-after", cutoff + timedelta(days=1)),
+    ])
+    with patch("app.services.connection_service.get_provider", return_value=provider), \
+         patch("app.services.connection_service.detect_transfer_pairs", new_callable=AsyncMock), \
+         patch("app.services.connection_service.stamp_primary_amount", new_callable=AsyncMock), \
+         patch("app.services.connection_service.apply_rules_to_transaction", new_callable=AsyncMock):
+        await sync_connection(session, connection.id, test_workspace.id, test_user.id)
+
+    assert provider.get_transactions.await_args.args[2] == cutoff
+    rows = await _account_transactions(session, connection)
+    assert [t.external_id for t in rows if t.source == "sync"] == ["resync-after"]
+    opening = [t for t in rows if t.source == "opening_balance"]
+    assert opening[0].date == cutoff - timedelta(days=1)
+
+
+@pytest.mark.asyncio
+async def test_update_settings_cannot_change_import_cutoff(
+    session: AsyncSession, test_user, test_workspace
+):
+    from app.schemas.bank_connection import ConnectionSettingsUpdate
+
+    update = ConnectionSettingsUpdate.model_validate(
+        {"import_from": "2020-01-01", "import_mode": "full", "import_pending": False}
+    )
+    assert "import_from" not in update.model_dump(exclude_unset=True)
+    assert "import_mode" not in update.model_dump(exclude_unset=True)

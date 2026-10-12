@@ -1318,7 +1318,22 @@
     "syncAssetsHint": "無効にすると、この接続は口座と取引を同期しますが、プロバイダーの投資保有はそのままにします。",
     "initialSyncSettings": "同期オプション",
     "initialSyncSettingsDesc": "コネクタを開く前にSecuroがインポートする内容を選択してください。",
-    "continueToConnector": "コネクタへ進む"
+    "continueToConnector": "コネクタへ進む",
+    "importHistory": "取引履歴",
+    "importHistoryFull": "すべての履歴",
+    "importHistoryFullHint": "銀行が提供するすべての履歴をインポートします（通常は約90日分）。",
+    "importHistoryFresh": "新しく始める",
+    "importHistoryFreshHint": "過去の取引は取り込みません。残高は今日から始まります。",
+    "importHistoryFromDate": "日付を指定",
+    "importHistoryFromDateHint": "指定した日付以降の取引のみインポートします。",
+    "importHistoryOnOrAfter": "この日以降（当日を含む）",
+    "importHistoryAfter": "この日より後",
+    "importHistorySummary": "{{date}} からインポートします。開始残高は {{openingDate}} に設定されます。",
+    "importHistoryBankLimit": "この銀行が提供する履歴は約{{days}}日分のみです。それより古い取引は取得できません。",
+    "importHistoryFutureHint": "この日付までは何もインポートされません。",
+    "importHistoryFromValue": "{{date}} から",
+    "importHistoryLockedHint": "接続の作成時に選択されました。変更はできません。",
+    "continueToBank": "銀行へ進む"
   },
   "settings": {
     "rules": "ルール",

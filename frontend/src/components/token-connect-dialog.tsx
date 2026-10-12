@@ -12,6 +12,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ImportHistoryField } from '@/components/import-history-field'
+import { DEFAULT_IMPORT_WINDOW, importWindowPayload, isImportWindowValid } from '@/lib/import-window'
+import type { ImportWindow } from '@/types'
 import { ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -39,12 +42,14 @@ export function TokenConnectDialog({
   const [token, setToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [syncAssets, setSyncAssets] = useState(true)
+  const [importWindow, setImportWindow] = useState<ImportWindow>(DEFAULT_IMPORT_WINDOW)
 
   useEffect(() => {
     if (!open) {
       setToken('')
       setSubmitting(false)
       setSyncAssets(true)
+      setImportWindow(DEFAULT_IMPORT_WINDOW)
     }
   }, [open])
 
@@ -60,7 +65,12 @@ export function TokenConnectDialog({
         token.trim(),
         provider,
         undefined,
-        supportsAssetSync && !isReconnect ? { sync_assets: syncAssets } : undefined,
+        isReconnect
+          ? undefined
+          : {
+              ...(supportsAssetSync ? { sync_assets: syncAssets } : {}),
+              import_window: importWindowPayload(importWindow),
+            },
         reconnectConnectionId,
       )
       invalidateFinancialQueries(queryClient)
@@ -105,6 +115,15 @@ export function TokenConnectDialog({
           </Button>
         )}
 
+        {!isReconnect && (
+          <ImportHistoryField
+            idPrefix="token"
+            value={importWindow}
+            onChange={setImportWindow}
+            disabled={submitting}
+          />
+        )}
+
         {supportsAssetSync && !isReconnect && (
           <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
             <div className="space-y-1">
@@ -147,7 +166,7 @@ export function TokenConnectDialog({
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleSubmit} disabled={!token.trim() || submitting}>
+          <Button onClick={handleSubmit} disabled={!token.trim() || submitting || !isImportWindowValid(importWindow)}>
             {submitting
               ? t('accounts.tokenConnect.connecting')
               : t(isReconnect ? 'accounts.tokenConnect.reconnect' : 'accounts.tokenConnect.connect')}

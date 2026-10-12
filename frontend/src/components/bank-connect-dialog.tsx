@@ -14,6 +14,9 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { ImportHistoryField } from '@/components/import-history-field'
+import { DEFAULT_IMPORT_WINDOW, importWindowPayload, isImportWindowValid } from '@/lib/import-window'
+import type { ImportWindow } from '@/types'
 
 interface BankConnectDialogProps {
   open: boolean
@@ -37,8 +40,10 @@ export function BankConnectDialog({
   const [connectToken, setConnectToken] = useState<string | null>(null)
   const [syncAssets, setSyncAssets] = useState(true)
   const [optionsConfirmed, setOptionsConfirmed] = useState(false)
-  // Only prompt for asset-sync when the provider actually imports holdings.
-  const needsInitialOptions = !reconnectConnectionId && supportsAssetSync
+  const [importWindow, setImportWindow] = useState<ImportWindow>(DEFAULT_IMPORT_WINDOW)
+  // Every new connection picks its import history up front; a reconnect keeps
+  // what was chosen the first time.
+  const needsInitialOptions = !reconnectConnectionId
 
   const onTokenError = useEffectEvent(() => {
     toast.error(t('accounts.connectError'))
@@ -50,6 +55,7 @@ export function BankConnectDialog({
       setConnectToken(null)
       setSyncAssets(true)
       setOptionsConfirmed(false)
+      setImportWindow(DEFAULT_IMPORT_WINDOW)
       return
     }
 
@@ -82,7 +88,10 @@ export function BankConnectDialog({
           data.item.id,
           provider,
           undefined,
-          supportsAssetSync ? { sync_assets: syncAssets } : undefined,
+          {
+            ...(supportsAssetSync ? { sync_assets: syncAssets } : {}),
+            import_window: importWindowPayload(importWindow),
+          },
         )
       }
       invalidateFinancialQueries(queryClient)
@@ -108,22 +117,30 @@ export function BankConnectDialog({
             <DialogTitle>{t('connections.initialSyncSettings')}</DialogTitle>
             <p className="text-sm text-muted-foreground">{t('connections.initialSyncSettingsDesc')}</p>
           </DialogHeader>
-          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-            <div className="space-y-1">
-              <Label htmlFor="initial-sync-assets">{t('connections.syncAssets')}</Label>
-              <p className="text-xs text-muted-foreground">{t('connections.syncAssetsHint')}</p>
+          <ImportHistoryField idPrefix="widget" value={importWindow} onChange={setImportWindow} />
+          {supportsAssetSync && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+              <div className="space-y-1">
+                <Label htmlFor="initial-sync-assets">{t('connections.syncAssets')}</Label>
+                <p className="text-xs text-muted-foreground">{t('connections.syncAssetsHint')}</p>
+              </div>
+              <input
+                id="initial-sync-assets"
+                type="checkbox"
+                checked={syncAssets}
+                onChange={(e) => setSyncAssets(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
             </div>
-            <input
-              id="initial-sync-assets"
-              type="checkbox"
-              checked={syncAssets}
-              onChange={(e) => setSyncAssets(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-            />
-          </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={handleClose}>{t('common.cancel')}</Button>
-            <Button onClick={() => setOptionsConfirmed(true)}>{t('connections.continueToConnector')}</Button>
+            <Button
+              onClick={() => setOptionsConfirmed(true)}
+              disabled={!isImportWindowValid(importWindow)}
+            >
+              {t('connections.continueToConnector')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

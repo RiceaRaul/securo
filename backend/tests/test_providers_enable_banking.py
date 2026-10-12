@@ -756,3 +756,21 @@ def test_txn_fingerprint_includes_transaction_date():
     assert fp1 != fp2
 
 
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_future_since_makes_no_request(eb_keys):
+    provider = EnableBankingProvider()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"transactions": []})
+
+    with _patch_client(provider, handler):
+        transactions = await provider.get_transactions(
+            _CREDENTIALS, "acc-1", date.today() + timedelta(days=5)
+        )
+
+    assert transactions == []
+    assert requests == []

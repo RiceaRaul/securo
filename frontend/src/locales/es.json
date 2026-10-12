@@ -1322,7 +1322,22 @@
     "syncAssetsHint": "Cuando está desactivado, esta conexión sincroniza cuentas y transacciones, pero deja intactas las inversiones del proveedor.",
     "initialSyncSettings": "Opciones de sincronización",
     "initialSyncSettingsDesc": "Elige qué debe importar Securo antes de abrir el conector.",
-    "continueToConnector": "Continuar al conector"
+    "continueToConnector": "Continuar al conector",
+    "importHistory": "Historial de transacciones",
+    "importHistoryFull": "Historial completo",
+    "importHistoryFullHint": "Importar todo lo que ofrece el banco (normalmente unos 90 días).",
+    "importHistoryFresh": "Empezar de cero",
+    "importHistoryFreshHint": "Sin transacciones anteriores. Tu saldo empieza desde hoy.",
+    "importHistoryFromDate": "Desde una fecha",
+    "importHistoryFromDateHint": "Importar solo las transacciones a partir de la fecha que elijas.",
+    "importHistoryOnOrAfter": "El día o después del",
+    "importHistoryAfter": "Después del",
+    "importHistorySummary": "Se importa desde el {{date}}. El saldo inicial se fija el {{openingDate}}.",
+    "importHistoryBankLimit": "Este banco solo ofrece unos {{days}} días de historial. Las transacciones anteriores no estarán disponibles.",
+    "importHistoryFutureHint": "No se importa nada hasta esta fecha.",
+    "importHistoryFromValue": "Desde el {{date}}",
+    "importHistoryLockedHint": "Se eligió al crear la conexión. No se puede cambiar.",
+    "continueToBank": "Continuar al banco"
   },
   "settings": {
     "rules": "Reglas",

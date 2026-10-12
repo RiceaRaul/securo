@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import date as _Date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class BankConnectionBase(BaseModel):
@@ -38,6 +38,23 @@ class BankConnectionRead(BankConnectionBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ImportWindow(BaseModel):
+    """How much history a new connection imports. Chosen once at connect
+    time; later syncs and reconnects keep honoring it."""
+
+    mode: Literal["full", "fresh", "from_date"] = "full"
+    # Only read for mode="from_date".
+    date: Optional[_Date] = None
+    # True: date itself is imported (>=). False: import starts the day after (>).
+    inclusive: bool = True
+
+    @model_validator(mode="after")
+    def _require_date(self) -> "ImportWindow":
+        if self.mode == "from_date" and self.date is None:
+            raise ValueError("import_window.date is required when mode is 'from_date'")
+        return self
+
+
 class OAuthUrlRequest(BaseModel):
     provider: str = "pluggy"
     flow_params: Optional[dict] = None
@@ -52,6 +69,7 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
     provider: Optional[str] = None
     sync_assets: Optional[bool] = None
+    import_window: Optional[ImportWindow] = None
     reconnect_connection_id: Optional[uuid.UUID] = None
 
 

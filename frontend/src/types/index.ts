@@ -153,6 +153,18 @@ export interface ConnectionSettings {
   payee_source?: 'auto' | 'merchant' | 'payment_data' | 'description' | 'none'
   import_pending?: boolean
   sync_assets?: boolean
+  // Set once at connect time; the settings endpoint does not accept them.
+  import_mode?: 'fresh' | 'from_date'
+  // First day whose transactions are imported (inclusive, yyyy-MM-dd).
+  import_from?: string
+}
+
+/** How much history a new connection imports, chosen in the connect dialogs. */
+export interface ImportWindow {
+  mode: 'full' | 'fresh' | 'from_date'
+  date?: string
+  // true: the date itself is imported (>=). false: import starts the day after (>).
+  inclusive?: boolean
 }
 
 export interface Account {

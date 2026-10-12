@@ -4,10 +4,14 @@ import { connections } from '@/lib/api'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ImportHistoryField } from '@/components/import-history-field'
+import { DEFAULT_IMPORT_WINDOW, importWindowPayload, isImportWindowValid } from '@/lib/import-window'
+import type { ImportWindow } from '@/types'
 import { Building2, ChevronLeft, Globe } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -16,6 +20,7 @@ type Institution = {
   display_name: string
   country: string
   max_consent_days?: number | null
+  max_history_days?: number | null
   logo?: string | null
 }
 
@@ -48,6 +53,10 @@ export function OAuthConnectDialog(props: OAuthConnectDialogProps) {
 function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = false }: OAuthConnectDialogProps) {
   const { t } = useTranslation()
   const [step, setStep] = useState<'country' | 'bank'>('country')
+  // The picked bank. Once set, the dialog shows its import options instead of
+  // the bank list; it is not a step of its own so going back does not refetch.
+  const [institution, setInstitution] = useState<Institution | null>(null)
+  const [importWindow, setImportWindow] = useState<ImportWindow>(DEFAULT_IMPORT_WINDOW)
   const [country, setCountry] = useState<string | null>(null)
   const [countries, setCountries] = useState<string[]>([])
   const [institutions, setInstitutions] = useState<Institution[]>([])
@@ -105,20 +114,30 @@ function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = fals
   }
 
   const handleBack = () => {
+    if (institution) {
+      setInstitution(null)
+      return
+    }
     setStep('country')
     setLoadingBanks(false)
     setError(false)
   }
 
-  const handleBankSelect = async (institution: Institution) => {
-    if (!country) return
+  const handleBankSelect = (selected: Institution) => {
+    setInstitution(selected)
+  }
+
+  const handleContinue = async () => {
+    if (!country || !institution) return
     setRedirecting(true)
     try {
+      const importWindowParam = importWindowPayload(importWindow)
       const url = await connections.getOAuthUrl(provider, {
         country,
         institution_name: institution.name,
         valid_until_days: institution.max_consent_days,
         ...(supportsAssetSync ? { sync_assets: syncAssets } : {}),
+        ...(importWindowParam ? { import_window: importWindowParam } : {}),
       })
       window.location.assign(url)
     } catch (e) {
@@ -133,7 +152,7 @@ function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = fals
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {step === 'bank' && (
+            {step !== 'country' && (
               <button
                 onClick={handleBack}
                 className="text-muted-foreground hover:text-foreground"
@@ -142,32 +161,20 @@ function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = fals
                 <ChevronLeft size={18} />
               </button>
             )}
-            {step === 'country' ? t('accounts.selectCountry') : t('accounts.selectBank')}
+            {step === 'country'
+              ? t('accounts.selectCountry')
+              : institution
+                ? institution.display_name
+                : t('accounts.selectBank')}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
             {step === 'country'
               ? t('accounts.selectCountryDesc')
-              : t('accounts.selectBankDesc')}
+              : institution
+                ? t('connections.initialSyncSettingsDesc')
+                : t('accounts.selectBankDesc')}
           </p>
         </DialogHeader>
-
-        {!redirecting && supportsAssetSync && (
-          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-            <div className="space-y-1">
-              <label htmlFor="oauth-sync-assets" className="text-sm font-medium text-foreground">
-                {t('connections.syncAssets')}
-              </label>
-              <p className="text-xs text-muted-foreground">{t('connections.syncAssetsHint')}</p>
-            </div>
-            <input
-              id="oauth-sync-assets"
-              type="checkbox"
-              checked={syncAssets}
-              onChange={(e) => setSyncAssets(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-            />
-          </div>
-        )}
 
         {redirecting ? (
           <div className="py-12 flex flex-col items-center gap-3">
@@ -180,6 +187,38 @@ function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = fals
           </div>
         ) : error ? (
           <div className="py-8 text-center text-sm text-destructive">{t('accounts.loadingInstitutionsError')}</div>
+        ) : institution ? (
+          <div className="space-y-4">
+            <ImportHistoryField
+              idPrefix="oauth"
+              value={importWindow}
+              onChange={setImportWindow}
+              maxHistoryDays={institution.max_history_days}
+            />
+            {supportsAssetSync && (
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                <div className="space-y-1">
+                  <label htmlFor="oauth-sync-assets" className="text-sm font-medium text-foreground">
+                    {t('connections.syncAssets')}
+                  </label>
+                  <p className="text-xs text-muted-foreground">{t('connections.syncAssetsHint')}</p>
+                </div>
+                <input
+                  id="oauth-sync-assets"
+                  type="checkbox"
+                  checked={syncAssets}
+                  onChange={(e) => setSyncAssets(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={handleBack}>{t('accounts.back')}</Button>
+              <Button onClick={handleContinue} disabled={!isImportWindowValid(importWindow)}>
+                {t('connections.continueToBank')}
+              </Button>
+            </DialogFooter>
+          </div>
         ) : step === 'country' ? (
           <div className="space-y-1 pt-2 max-h-[60vh] overflow-y-auto">
             {sortedCountries.length === 0 ? (

@@ -456,7 +456,7 @@ async def _recompute_effective_dates(session: AsyncSession, account: Account) ->
 
 
 async def sync_opening_balance_for_connected_account(
-    session: AsyncSession, account: Account
+    session: AsyncSession, account: Account, import_from: Optional[_Date] = None
 ) -> None:
     """Reconcile the opening_balance transaction so SUM(all txs) = account.balance.
 
@@ -465,6 +465,11 @@ async def sync_opening_balance_for_connected_account(
     This helper computes the missing opening balance and upserts a synthetic
     `source='opening_balance'` transaction that closes the gap. After this runs,
     balance_history and running-balance walks line up with the card balance.
+
+    ``import_from`` is the connection's import cutoff, if it has one. The
+    opening transaction is then pinned to the day before it instead of
+    following the oldest imported transaction, so the account's history starts
+    where the user asked even when the first transaction lands later.
 
     Call after adding new transactions in a sync (initial or incremental).
     Does not commit; the caller is responsible for the transaction boundary.
@@ -542,7 +547,12 @@ async def sync_opening_balance_for_connected_account(
         )
     )
     oldest_date = oldest_result.scalar()
-    opening_date = (oldest_date - timedelta(days=1)) if oldest_date else app_today()
+    if import_from is not None:
+        # Never past today: a future-dated opening row would leave the account
+        # at zero until the cutoff arrives.
+        opening_date = min(import_from - timedelta(days=1), app_today())
+    else:
+        opening_date = (oldest_date - timedelta(days=1)) if oldest_date else app_today()
 
     # Sign convention matches the rest of the codebase: credit = +, debit = -
     # regardless of account type. A positive offset needs a credit to raise the
