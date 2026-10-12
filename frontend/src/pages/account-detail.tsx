@@ -1623,13 +1623,11 @@ export default function AccountDetailPage() {
                         </td>
                         <td className="px-3 sm:px-4 py-3 w-full max-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-semibold text-foreground text-sm truncate">{tx.description}</span>
+                            {/* The stored description of an opening row is a fixed backend string, so show the translated label instead. */}
+                            <span className={`font-semibold text-foreground text-sm truncate ${isOpening ? 'first-letter:uppercase' : ''}`}>
+                              {isOpening ? t('accounts.openingBalance') : tx.description}
+                            </span>
                             <div className="flex items-center gap-1 shrink-0">
-                            {isOpening && (
-                              <span className="ml-2 text-xs text-muted-foreground font-normal border border-border rounded px-1.5 py-0.5">
-                                {t('accounts.openingBalance')}
-                              </span>
-                            )}
                             {isTransfer && (
                               <span className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 font-normal bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
                                 <ArrowLeftRight className="h-3 w-3" />
