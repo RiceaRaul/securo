@@ -27,6 +27,12 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.recurring_tasks.generate_all_recurring",
         "schedule": 60 * 60,  # every hour; generate_pending is idempotent (advances next_occurrence)
     },
+    "roll-recurring-goals-hourly": {
+        "task": "app.tasks.goal_tasks.roll_recurring_goals",
+        # Hourly so a period turns over within the hour of the workspace's
+        # midnight; the cursor makes every other run a no-op.
+        "schedule": 60 * 60,
+    },
     "generate-recurring-invoices-daily": {
         "task": "app.tasks.invoice_schedule_tasks.generate_recurring_invoices",
         # Hourly, like recurring transactions: a period is emitted the
@@ -65,6 +71,7 @@ celery_app.conf.beat_schedule = {
 celery_app.conf.include = [
     "app.tasks.sync_tasks",
     "app.tasks.recurring_tasks",
+    "app.tasks.goal_tasks",
     "app.tasks.invoice_schedule_tasks",
     "app.tasks.asset_tasks",
     "app.tasks.fx_rate_tasks",

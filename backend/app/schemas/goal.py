@@ -3,7 +3,7 @@ from datetime import date as _Date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class GoalCreate(BaseModel):
@@ -47,8 +47,8 @@ class GoalUpdate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in ("active", "completed", "paused", "archived"):
-            raise ValueError("status must be active, completed, paused, or archived")
+        if v is not None and v not in ("active", "completed", "paused", "archived", "missed"):
+            raise ValueError("status must be active, completed, paused, archived, or missed")
         return v
 
     @field_validator("tracking_type")
@@ -78,6 +78,10 @@ class GoalRead(BaseModel):
     color: Optional[str] = None
     position: int
     metadata_json: Optional[Any] = None
+    # Set on instances of a recurring goal.
+    recurring_goal_id: Optional[uuid.UUID] = None
+    period_start: Optional[_Date] = None
+    period_end: Optional[_Date] = None
     created_at: datetime
     updated_at: datetime
 
@@ -107,3 +111,45 @@ class GoalSummary(BaseModel):
     percentage: float = 0
     monthly_contribution: Optional[float] = None
     on_track: Optional[str] = None
+
+
+class RecurringGoalCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    target_amount: Decimal = Field(gt=0)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    # Day of the month each period starts on.
+    start_day: int = Field(ge=1, le=31)
+    icon: Optional[str] = None
+    color: Optional[str] = None
+
+
+class RecurringGoalUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    target_amount: Optional[Decimal] = Field(default=None, gt=0)
+    start_day: Optional[int] = Field(default=None, ge=1, le=31)
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class RecurringGoalRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    target_amount: Decimal
+    currency: str
+    start_day: int
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_active: bool
+    next_period_start: _Date
+    created_at: datetime
+    updated_at: datetime
+
+    # Computed fields
+    # The instance covering today, if there is one.
+    current_goal_id: Optional[uuid.UUID] = None
+    # Closed periods, and how many of them reached the target.
+    periods_closed: int = 0
+    periods_met: int = 0
+
+    model_config = ConfigDict(from_attributes=True)

@@ -5515,6 +5515,13 @@ def _window_provider(transactions: list[TransactionData], balance: str = "1000")
     return provider
 
 
+def _since_arg(provider: AsyncMock):
+    """The ``since`` the service last asked the provider for."""
+    call = provider.get_transactions.await_args
+    assert call is not None
+    return call.args[2]
+
+
 async def _connect_with_window(session, user, workspace, provider, window):
     with patch("app.services.connection_service.get_provider", return_value=provider), \
          patch("app.services.connection_service.detect_transfer_pairs", new_callable=AsyncMock), \
@@ -5568,7 +5575,7 @@ async def test_oauth_callback_full_history_stores_no_cutoff(
     connection = await _connect_with_window(session, test_user, test_workspace, provider, None)
 
     assert "import_from" not in connection.settings
-    assert provider.get_transactions.await_args.args[2] is None
+    assert _since_arg(provider) is None
     rows = await _account_transactions(session, connection)
     assert "full-old" in [t.external_id for t in rows]
 
@@ -5596,7 +5603,7 @@ async def test_oauth_callback_from_date_drops_older_transactions(
 
     start = cutoff if inclusive else cutoff + timedelta(days=1)
     assert connection.settings["import_from"] == start.isoformat()
-    assert provider.get_transactions.await_args.args[2] == start
+    assert _since_arg(provider) == start
     rows = await _account_transactions(session, connection)
     synced = [t.external_id for t in rows if t.source == "sync"]
     assert synced == expected
@@ -5648,7 +5655,7 @@ async def test_oauth_callback_old_cutoff_leaves_provider_window_alone(
         ImportWindow(mode="from_date", date=cutoff),
     )
 
-    assert provider.get_transactions.await_args.args[2] is None
+    assert _since_arg(provider) is None
     rows = await _account_transactions(session, connection)
     assert [t.external_id for t in rows if t.source == "sync"] == ["old-inside"]
 
@@ -5694,6 +5701,7 @@ async def test_oauth_callback_reads_import_window_from_state(
             session, test_workspace.id, test_user.id, "code", state="stored-state",
         )
 
+    assert connection.settings is not None
     assert connection.settings["import_from"] == "2026-10-16"
     # Not left behind where a reauth would replay it to the provider.
     assert connection.settings["flow_params"] == {
@@ -5743,7 +5751,7 @@ async def test_sync_keeps_import_cutoff_after_rewind_and_reconnect(
          patch("app.services.connection_service.apply_rules_to_transaction", new_callable=AsyncMock):
         await sync_connection(session, connection.id, test_workspace.id, test_user.id)
 
-    assert provider.get_transactions.await_args.args[2] == cutoff
+    assert _since_arg(provider) == cutoff
     rows = await _account_transactions(session, connection)
     assert [t.external_id for t in rows if t.source == "sync"] == ["resync-after"]
     opening = [t for t in rows if t.source == "opening_balance"]

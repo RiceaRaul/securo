@@ -1,9 +1,9 @@
 import { createElement, useState } from 'react'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
-import { useDisplayLocale } from '@/hooks/use-display-locale'
+import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { goals as goalsApi, accounts as accountsApi, assets as assetsApi, assetGroups as assetGroupsApi, currencies as currenciesApi } from '@/lib/api'
+import { goals as goalsApi, recurringGoals as recurringGoalsApi, accounts as accountsApi, assets as assetsApi, assetGroups as assetGroupsApi, currencies as currenciesApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
@@ -24,8 +24,12 @@ import {
 import type { Account, Asset, AssetGroup, Goal } from '@/types'
 import {
   Pencil, Trash2, Plus, Pause, Play, CheckCircle2, Archive, ArchiveRestore, Target,
-  ChevronDown,
+  ChevronDown, Repeat,
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { GoalStatusBadge } from '@/components/goal-status-badge'
+import { RecurringGoalsCard, START_DAYS } from '@/components/recurring-goals-card'
+import { goalPeriodMonth } from '@/lib/goal-period'
 import { ICON_MAP } from '@/lib/category-icons'
 import { IconPicker } from '@/components/icon-picker'
 import { PageHeader } from '@/components/page-header'
@@ -112,21 +116,6 @@ function OnTrackBadge({ status, t }: { status: string | null; t: (key: string) =
   )
 }
 
-function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
-  const config: Record<string, { bg: string; text: string; key: string }> = {
-    active: { bg: 'bg-emerald-100 dark:bg-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-400', key: 'goals.statusActive' },
-    completed: { bg: 'bg-blue-100 dark:bg-blue-500/20', text: 'text-blue-700 dark:text-blue-400', key: 'goals.statusCompleted' },
-    paused: { bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-400', key: 'goals.statusPaused' },
-    archived: { bg: 'bg-muted', text: 'text-muted-foreground', key: 'goals.statusArchived' },
-  }
-  const c = config[status] ?? config.active
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${c.bg} ${c.text}`}>
-      {t(c.key)}
-    </span>
-  )
-}
-
 function daysUntil(dateStr: string): number {
   const target = new Date(dateStr + 'T00:00:00')
   const today = new Date()
@@ -141,6 +130,7 @@ export default function GoalsPage() {
   const { canWrite } = useWorkspace()
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
   const locale = useDisplayLocale()
+  const dateLocale = useDateLocale()
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Goal | null>(null)
@@ -150,6 +140,11 @@ export default function GoalsPage() {
   const [selectedIcon, setSelectedIcon] = useState('target')
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
   const [targetDate, setTargetDate] = useState('')
+  // Create dialog only: make a monthly recurring goal instead of a single one.
+  const [repeatMonthly, setRepeatMonthly] = useState(false)
+  const [startDay, setStartDay] = useState(1)
+  // An instance of a recurring goal: its deadline and tracking come from the period.
+  const editingInstance = !!editing?.period_end
 
   const { data: goalsList } = useQuery({
     queryKey: ['goals', statusFilter],
@@ -187,10 +182,22 @@ export default function GoalsPage() {
     onError: () => toast.error(t('common.error')),
   })
 
+  const createRecurringMutation = useMutation({
+    mutationFn: recurringGoalsApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring-goals'] })
+      setDialogOpen(false)
+      toast.success(t('goals.created'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: Partial<Goal> & { id: string }) => goalsApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring-goals'] })
       setDialogOpen(false)
       setEditing(null)
       toast.success(t('goals.updated'))
@@ -202,6 +209,7 @@ export default function GoalsPage() {
     mutationFn: (id: string) => goalsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring-goals'] })
       setDeletingGoal(null)
       toast.success(t('goals.deleted'))
     },
@@ -212,6 +220,7 @@ export default function GoalsPage() {
     mutationFn: ({ id, status }: { id: string; status: string }) => goalsApi.update(id, { status } as Partial<Goal>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring-goals'] })
       toast.success(t('goals.updated'))
     },
   })
@@ -222,6 +231,8 @@ export default function GoalsPage() {
     setSelectedIcon('target')
     setSelectedColor('#3B82F6')
     setTargetDate('')
+    setRepeatMonthly(false)
+    setStartDay(new Date().getDate())
     setDialogOpen(true)
   }
 
@@ -242,8 +253,8 @@ export default function GoalsPage() {
       />
 
       {/* Status filter */}
-      <div className="flex items-center gap-2 mb-4">
-        {['active', 'completed', 'paused', 'archived', ''].map((s) => (
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {['active', 'completed', 'missed', 'paused', 'archived', ''].map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
@@ -296,8 +307,14 @@ export default function GoalsPage() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-semibold text-foreground truncate">{goal.name}</span>
-                        <StatusBadge status={goal.status} t={t} />
+                        <span className="text-sm font-semibold text-foreground truncate">
+                          {goal.name}
+                          {goal.period_start && ` · ${goalPeriodMonth(goal.period_start, dateLocale)}`}
+                        </span>
+                        {goal.recurring_goal_id && (
+                          <Repeat size={12} className="shrink-0 text-muted-foreground" aria-label={t('goals.repeatMonthly')} />
+                        )}
+                        <GoalStatusBadge status={goal.status} t={t} />
                         <OnTrackBadge status={goal.on_track} t={t} />
                       </div>
 
@@ -422,6 +439,8 @@ export default function GoalsPage() {
         )}
       </SectionCard>
 
+      <RecurringGoalsCard canWrite={canWrite} />
+
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
         <DialogContent>
@@ -433,6 +452,17 @@ export default function GoalsPage() {
             onSubmit={(e) => {
               e.preventDefault()
               const formData = new FormData(e.currentTarget)
+              if (!editing && repeatMonthly) {
+                createRecurringMutation.mutate({
+                  name: formData.get('name') as string,
+                  target_amount: parseFloat(formData.get('target_amount') as string),
+                  currency: (formData.get('currency') as string) || userCurrency,
+                  start_day: startDay,
+                  icon: selectedIcon || null,
+                  color: selectedColor || null,
+                })
+                return
+              }
               const payload: Record<string, unknown> = {
                 name: formData.get('name') as string,
                 target_amount: parseFloat(formData.get('target_amount') as string),
@@ -465,6 +495,20 @@ export default function GoalsPage() {
             }}
             className="space-y-4"
           >
+            {!editing && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                <Label id="goal-repeat-monthly">{t('goals.repeatMonthly')}</Label>
+                <Switch
+                  checked={repeatMonthly}
+                  onCheckedChange={(checked) => {
+                    setRepeatMonthly(checked)
+                    if (checked) setTrackingType('manual')
+                  }}
+                  aria-labelledby="goal-repeat-monthly"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>{t('goals.name')}</Label>
               <Input name="name" defaultValue={editing?.name ?? ''} required />
@@ -497,32 +541,55 @@ export default function GoalsPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>{t('goals.targetDate')}</Label>
-              <DatePickerInput
-                value={targetDate}
-                onChange={setTargetDate}
-                className="w-full justify-start"
-              />
-            </div>
+            {!editing && repeatMonthly && (
+              <div className="space-y-2">
+                <Label htmlFor="goal-start-day">{t('goals.startDay')}</Label>
+                <select
+                  id="goal-start-day"
+                  value={startDay}
+                  onChange={(e) => setStartDay(Number(e.target.value))}
+                  className={SELECT_CLASS}
+                >
+                  {START_DAYS.map((day) => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">{t('goals.repeatMonthlyHint', { day: startDay })}</p>
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label>{t('goals.trackingType')}</Label>
-              <select
-                name="tracking_type"
-                value={trackingType}
-                onChange={(e) => setTrackingType(e.target.value)}
-                className={SELECT_CLASS}
-              >
-                <option value="manual">{t('goals.trackingManual')}</option>
-                <option value="account">{t('goals.trackingAccount')}</option>
-                <option value="asset">{t('goals.trackingAsset')}</option>
-                <option value="asset_group">{t('goals.trackingWallet')}</option>
-                <option value="net_worth">{t('goals.trackingNetWorth')}</option>
-              </select>
-            </div>
+            {/* A recurring goal is always saved by hand and its deadline is the end of the period. */}
+            {editingInstance && <input type="hidden" name="tracking_type" value="manual" />}
+            {!editingInstance && !(repeatMonthly && !editing) && (
+              <>
+                <div className="space-y-2">
+                  <Label>{t('goals.targetDate')}</Label>
+                  <DatePickerInput
+                    value={targetDate}
+                    onChange={setTargetDate}
+                    className="w-full justify-start"
+                  />
+                </div>
 
-            {trackingType === 'manual' && (
+                <div className="space-y-2">
+                  <Label>{t('goals.trackingType')}</Label>
+                  <select
+                    name="tracking_type"
+                    value={trackingType}
+                    onChange={(e) => setTrackingType(e.target.value)}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="manual">{t('goals.trackingManual')}</option>
+                    <option value="account">{t('goals.trackingAccount')}</option>
+                    <option value="asset">{t('goals.trackingAsset')}</option>
+                    <option value="asset_group">{t('goals.trackingWallet')}</option>
+                    <option value="net_worth">{t('goals.trackingNetWorth')}</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {trackingType === 'manual' && !(repeatMonthly && !editing) && (
               <div className="space-y-2">
                 <Label>{t('goals.currentAmount')}</Label>
                 <Input
@@ -620,7 +687,7 @@ export default function GoalsPage() {
               <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setEditing(null) }}>
                 {t('common.cancel')}
               </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+              <Button type="submit" disabled={createMutation.isPending || createRecurringMutation.isPending || updateMutation.isPending}>
                 {t('common.save')}
               </Button>
             </DialogFooter>

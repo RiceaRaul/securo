@@ -76,6 +76,7 @@ import type {
   Attachment,
   Goal,
   GoalSummary,
+  RecurringGoal,
   DashboardSummary,
   SpendingByCategory,
   MonthlyTrend,
@@ -1247,8 +1248,10 @@ export const budgets = {
 
 // Goals
 export const goals = {
-  list: async (status?: string): Promise<Goal[]> => {
-    const { data } = await api.get('/goals', { params: { status } })
+  list: async (status?: string, recurringGoalId?: string): Promise<Goal[]> => {
+    const { data } = await api.get('/goals', {
+      params: { status, recurring_goal_id: recurringGoalId },
+    })
     return data
   },
   get: async (id: string): Promise<Goal> => {
@@ -1269,6 +1272,26 @@ export const goals = {
   summary: async (limit = 3): Promise<GoalSummary[]> => {
     const { data } = await api.get('/goals/summary', { params: { limit } })
     return data
+  },
+}
+
+export const recurringGoals = {
+  list: async (): Promise<RecurringGoal[]> => {
+    const { data } = await api.get('/goals/recurring')
+    return data
+  },
+  create: async (
+    goal: Pick<RecurringGoal, 'name' | 'target_amount' | 'currency' | 'start_day' | 'icon' | 'color'>,
+  ): Promise<RecurringGoal> => {
+    const { data } = await api.post('/goals/recurring', goal)
+    return data
+  },
+  update: async (id: string, goal: Partial<RecurringGoal>): Promise<RecurringGoal> => {
+    const { data } = await api.patch(`/goals/recurring/${id}`, goal)
+    return data
+  },
+  delete: async (id: string, deleteHistory = false): Promise<void> => {
+    await api.delete(`/goals/recurring/${id}`, { params: { delete_history: deleteHistory } })
   },
 }
 

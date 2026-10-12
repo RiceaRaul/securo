@@ -137,6 +137,11 @@ def _clear_inactive_tracking_links(goal: Goal) -> None:
         goal.asset_group_id = None
 
 
+def closed_period_status(goal: Goal) -> str:
+    """Outcome of a recurring goal's period once it is over."""
+    return "completed" if goal.current_amount >= goal.target_amount else "missed"
+
+
 def _compute_percentage(current: Decimal, target: Decimal) -> float:
     if target <= 0:
         return 100.0 if current > 0 else 0.0
@@ -244,6 +249,9 @@ async def _enrich_goal(
         color=goal.color,
         position=goal.position,
         metadata_json=goal.metadata_json,
+        recurring_goal_id=goal.recurring_goal_id,
+        period_start=goal.period_start,
+        period_end=goal.period_end,
         created_at=goal.created_at,
         updated_at=goal.updated_at,
         percentage=percentage,
@@ -260,10 +268,16 @@ async def get_goals(
     workspace_id: uuid.UUID,
     user_id: uuid.UUID,
     status: Optional[str] = None,
+    recurring_goal_id: Optional[uuid.UUID] = None,
 ) -> list[GoalRead]:
     query = select(Goal).where(Goal.workspace_id == workspace_id).order_by(Goal.position, Goal.created_at)
     if status:
         query = query.where(Goal.status == status)
+    if recurring_goal_id:
+        # The history of one recurring goal reads newest period first.
+        query = query.where(Goal.recurring_goal_id == recurring_goal_id).order_by(
+            None
+        ).order_by(Goal.period_start.desc())
     result = await session.execute(query)
     goals = list(result.scalars().all())
     return [await _enrich_goal(session, g, user_id) for g in goals]
@@ -331,9 +345,20 @@ async def update_goal(
     if not goal:
         return None
     await _ensure_goal_link_scope(session, workspace_id, data)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(goal, field, value)
     _clear_inactive_tracking_links(goal)
+    # A closed period of a recurring goal stays editable (money put aside
+    # late, a typo). Its outcome follows the corrected amounts unless the
+    # caller set a status on purpose.
+    if (
+        goal.period_end is not None
+        and goal.status in ("completed", "missed")
+        and "status" not in changes
+        and changes.keys() & {"current_amount", "target_amount"}
+    ):
+        goal.status = closed_period_status(goal)
     await session.commit()
     await session.refresh(goal)
     return await _enrich_goal(session, goal, user_id)

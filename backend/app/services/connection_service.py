@@ -262,6 +262,8 @@ def _resolve_import_window(window: object) -> dict[str, str]:
         return {}
     if window.mode == "fresh":
         return {"import_mode": "fresh", "import_from": app_today().isoformat()}
+    if window.date is None:  # the schema requires it for this mode
+        raise ValueError("Invalid import window")
     start = window.date if window.inclusive else window.date + timedelta(days=1)
     return {"import_mode": "from_date", "import_from": start.isoformat()}
 

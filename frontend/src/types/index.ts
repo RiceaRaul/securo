@@ -938,11 +938,16 @@ export interface Goal {
   account_id: string | null
   asset_id: string | null
   asset_group_id: string | null
-  status: 'active' | 'completed' | 'paused' | 'archived'
+  status: 'active' | 'completed' | 'paused' | 'archived' | 'missed'
   icon: string | null
   color: string | null
   position: number
   metadata_json: Record<string, unknown> | null
+  // Set on goals generated from a recurring goal: its template and the
+  // period this one covers (yyyy-MM-dd, both ends inclusive).
+  recurring_goal_id: string | null
+  period_start: string | null
+  period_end: string | null
   created_at: string
   updated_at: string
   percentage: number
@@ -951,6 +956,25 @@ export interface Goal {
   account_name: string | null
   asset_name: string | null
   asset_group_name: string | null
+}
+
+/** Monthly template that produces one goal per period until switched off. */
+export interface RecurringGoal {
+  id: string
+  name: string
+  target_amount: number
+  currency: string
+  // Day of the month each period starts on.
+  start_day: number
+  icon: string | null
+  color: string | null
+  is_active: boolean
+  next_period_start: string
+  created_at: string
+  updated_at: string
+  current_goal_id: string | null
+  periods_closed: number
+  periods_met: number
 }
 
 export interface GoalSummary {
